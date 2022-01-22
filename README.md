@@ -23,11 +23,12 @@ III  RECURSOS
 IV  ACTIVIDADES  
 1 Ejercicio a realizar 
  
-Para esta práctica vamos a hacer una versión paralela del programa que obtiene la lista de 
-números primos dentro de un rango introducido por el usuario en la línea de comandos. Por 
-ejemplo: 
+Para esta práctica vamos a hacer una versión paralela del programa que obtiene la lista 
+de números primos dentro de un rango introducido por el usuario en la línea de comandos. 
+Por ejemplo: 
  
-$ ./primos 1 20 
+$ ./primos 1 20
+
 2 
 3 
 5 

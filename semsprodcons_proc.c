@@ -12,7 +12,7 @@
 #define VELPROD 10000	// Microsegundos
 #define VELCONS 50000
 
-//#define LIMITE 200
+//#define HASTA 200
 int DESDE, HASTA;
 
 void productor();
@@ -44,8 +44,8 @@ enum {E_MAX,N_BLOK,S_EXMUT};  // Semáforos 0,1 y 2
 #define PRODUCTORES 4
 #define FIN -1
 
-int main(int argc, char *argv[]){
-	//printf("Entradas: %s %s\n", argv[1], argv[2]);
+int main(int argc, char *argv[])
+{	
 	DESDE = atoi(argv[1]);
 	HASTA = atoi(argv[2]);
     // Definición de variables
@@ -109,15 +109,15 @@ void productor(int nprod)
 
 	int inicio = nprod*HASTA/PRODUCTORES+DESDE-(DESDE/PRODUCTORES)*nprod;
 	int limite = (nprod+1)*HASTA/PRODUCTORES+DESDE-(DESDE/4)*(nprod+1);
-	// printf("I/L: %d %d\n", inicio, limite);
 	
     printf("Inicia productor\n");
-    for(n=inicio;n<=limite;n++)
+    for(n=inicio;n<=HASTA;n++)
     {
-		if(isprime(n) || n==limite){
+		if(isprime(n) || n==HASTA)
+		{
 			semwait(semarr,E_MAX);	// Si se llena el buffer se bloquea
         	semwait(semarr,S_EXMUT);	// Asegurar el buffer como sección crítica
-			
+
 			if(n<limite)
 			{
         		bf->buffer[bf->ent]=n;
@@ -126,7 +126,7 @@ void productor(int nprod)
 			else
 			{
 				bf->buffer[bf->ent]=FIN;
-				// printf("\t\t\tLIMITE ENCONTRADO\n");
+				// printf("\t\t\tHASTA ENCONTRADO\n");
 			}
 				
 			
@@ -157,8 +157,8 @@ void consumidor()
     printf("Inicia Consumidor\n");
     while(productores)
     {
-        //semwait(semarr,N_BLOK);	// Si el buffer está vacío, se bloquea
-        //semwait(semarr,S_EXMUT);	// Asegura el buffer como sección crítica 
+        semwait(semarr,N_BLOK);	// Si el buffer está vacío, se bloquea
+        semwait(semarr,S_EXMUT);	// Asegura el buffer como sección crítica 
 
 		dato=bf->buffer[bf->sal];
 		if(dato!=FIN)
@@ -240,4 +240,5 @@ void tree_inorder(struct TREE *root)
 	printf("%d\n",root->dato);
 	if(root->right!=NULL)
 		tree_inorder(root->right);
+	
 }

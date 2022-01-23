@@ -40,6 +40,10 @@ struct TREE {
 
 struct STRBUFF *bf;
 
+struct msgbuf {
+    long mtype;       /* message type, must be > 0 */
+    unsigned int num;   /* message data */
+};
 
 void tree_insert(struct TREE **root,int dato);
 void tree_inorder(struct TREE *root);
@@ -52,6 +56,8 @@ enum {E_MAX,N_BLOK,S_EXMUT};  // Semáforos 0,1 y 2
 #define PRODUCTORES 4
 #define FIN -1
 
+int queue;	// Buzón de mensajes
+
 int main(int argc, char *argv[])
 {	
 	DESDE = atoi(argv[1]);
@@ -62,6 +68,14 @@ int main(int argc, char *argv[])
  	int p;
 	int i;
 	int shmid;
+	
+	/* Crear buzon de mensajes */
+	queue=msgget(0x1234,0666|IPC_CREAT);
+	if(queue==-1)
+	{
+		fprintf(stderr,"No se pudo crear el buzón\n");
+		exit(1);
+	}
 
 	srand(getpid());
 	/* ESTO ES PARTE DE LOS SEMAFORS
@@ -93,7 +107,7 @@ int main(int argc, char *argv[])
 
 
   
-    for(n=0;n<2;n++) wait(NULL);
+    for(n=0;n<4;n++) wait(NULL);
 
 	/* ESTO ES PARTE DE LOS SEMAFORS
     // Borrar los semáforos
@@ -105,21 +119,22 @@ int main(int argc, char *argv[])
 	shmdt(bf);	// Desconectar la memoria compartida al terminar
 	shmctl(shmid,IPC_RMID,NULL);	// Pedir al SO que elimine la memoria compartida
 
-
+	msgctl(queue, IPC_RMID, NULL);
 
     exit(EXIT_SUCCESS);
 }
 
 
 void productor(int nprod)
-{
-    int n;
+{	
+	struct msgbuf mensaje;
+    
 
 	int inicio = nprod*HASTA/PRODUCTORES+DESDE-(DESDE/PRODUCTORES)*nprod;
 	int limite = (nprod+1)*HASTA/PRODUCTORES+DESDE-(DESDE/4)*(nprod+1);
 	
     printf("Inicia productor\n");
-    for(n=inicio;n<=HASTA;n++)
+    for(int n=inicio;n<=HASTA;n++)
     {
 		if(isprime(n) || n==HASTA)
 		{
@@ -127,32 +142,39 @@ void productor(int nprod)
 			semwait(semarr,E_MAX);	// Si se llena el buffer se bloquea
         	semwait(semarr,S_EXMUT);	// Asegurar el buffer como sección crítica
 			//*/
-
 			if(n<limite)
 			{
-        		bf->buffer[bf->ent]=n;
+        		//bf->buffer[bf->ent]=n;
+				// Construye un mensaje
+				mensaje.mtype=1;	// Prioridad o tipo del mensaje
+				mensaje.num = n;
+				msgsnd(queue,&mensaje,sizeof(struct msgbuf),IPC_NOWAIT);	// No espera a que sea recibido
 				printf("Productor %d produce %d\n",nprod,n);
 			}
 			else
 			{
-				bf->buffer[bf->ent]=FIN;
+				mensaje.mtype=1;	// Prioridad o tipo del mensaje
+				mensaje.num = FIN; // -1
+				msgsnd(queue,&mensaje,sizeof(struct msgbuf),IPC_NOWAIT);	// No espera a que sea recibido
+				//bf->buffer[bf->ent]=FIN;
 				// printf("\t\t\tHASTA ENCONTRADO\n");
 			}
 				
-			
+			/*
 			bf->ent++;
 			if(bf->ent==TAMBUFFER)	// Si TAMBUFFER es 10, 0 1 2 3 4 5 6 7 8 9
 				bf->ent=0;		// 0 = Terminador
-		
+			//*/
  
         	usleep(rand()%VELPROD);
 
 			/* ESTO ES PARTE DE LOS SEMAFORS
         	semsignal(semarr,S_EXMUT);	// Libera la sección crítica del buffer
         	semsignal(semarr,N_BLOK);	// Si el consumidor está bloqueado porque el buffer está vacío, lo desbloqueas
-			//*/
+			
 
         	usleep(rand()%VELPROD);
+			//*/
 		}
     }
     exit(0);
@@ -167,14 +189,25 @@ void consumidor()
 	int dato;
 
     printf("Inicia Consumidor\n");
-    while(productores)
+	
+	struct msgbuf mensaje;
+    
+	while(productores)
     {
+		
 		/* ESTO ES PARTE DE LOS SEMAFORS
         semwait(semarr,N_BLOK);	// Si el buffer está vacío, se bloquea
         semwait(semarr,S_EXMUT);	// Asegura el buffer como sección crítica 
 		//*/
 
-		dato=bf->buffer[bf->sal];
+
+		//dato=bf->buffer[bf->sal];
+		msgrcv(queue,&mensaje,sizeof(struct msgbuf),1,0);
+		dato = mensaje.num;
+
+		printf("%d %d\n", dato, productores);
+		sleep(1);
+
 		if(dato!=FIN)
 		{
 			// En vez de mostrarlo, lo vamos a guardar en un contenedor de manera
@@ -189,18 +222,20 @@ void consumidor()
 			printf("\t\t\tFINAL ENCONTRADO\n");
 		}
 
+		/*
 		bf->sal++;
 		if(bf->sal==TAMBUFFER)
 			bf->sal=0;
-		
-        usleep(rand()%VELCONS);
+		//*/
+        //usleep(rand()%VELCONS);
 
 		/* ESTO ES PARTE DE LOS SEMAFORS
         semsignal(semarr,S_EXMUT);	// Libera la SC el buffer
         semsignal(semarr,E_MAX);	// Si el productor está bloqueado porque el buffer estaba lleno, lo desbloquea
-		//*/
+		
         usleep(rand()%VELCONS);
-
+		//*/
+		
     }
 	
 	// Mostrar todos los elementos que se guardaron de manera ordenada en el contenedor.

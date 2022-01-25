@@ -2,14 +2,11 @@
 #include <stdlib.h> 
 #include <unistd.h> 
 #include <math.h>
-#include <string.h>
+#include <sys/shm.h>
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/msg.h>
-#include <sys/shm.h>
-#include <math.h>
-
 /* ESTO ES PARTE DE LOS SEMAFORS
 #include "semaphoresarr.h"
 //*/
@@ -26,21 +23,11 @@ void productor(); // Emisor
 void consumidor(); // Receptor
 int isprime(int n);
 
-/*
-struct STRBUFF {
-	int ent;	// Donde va a estar el siguiente elemento que voy a meter al buffer
-	int sal;	// Donde está el siguiente elemento que voy a sacar del buffer
-	int buffer[TAMBUFFER];	// Buffer circular
-};
-//*/
-
 struct TREE {
 	int dato;
 	struct TREE *left;
 	struct TREE *right;
 };
-
-//struct STRBUFF *bf;
 
 struct msgbuf {
     long mtype;       /* message type, must be > 0 */
@@ -50,15 +37,11 @@ struct msgbuf {
 void tree_insert(struct TREE **root,int dato);
 void tree_inorder(struct TREE *root);
 
-/* ESTO ES PARTE DE LOS SEMAFORS
-SEM_ID semarr;
-enum {E_MAX,N_BLOK,S_EXMUT};  // Semáforos 0,1 y 2
-//*/
-
 #define PRODUCTORES 4
 #define FIN -1
 
 int queue;	// Buzón de mensajes
+int status;
 
 int main(int argc, char *argv[])
 {	
@@ -66,32 +49,14 @@ int main(int argc, char *argv[])
 	HASTA = atoi(argv[2]);
     // Definición de variables
  	int p;
-	//int shmid;
 	
 	/* Crear buzon de mensajes */
-	queue=msgget(0x1234,0666|IPC_CREAT);
+	queue = msgget(0x1234, 0666|IPC_CREAT);
 	if(queue==-1)
 	{
 		fprintf(stderr,"No se pudo crear el buzón\n");
 		exit(1);
 	}
-
-	//srand(getpid());
-	/* ESTO ES PARTE DE LOS SEMAFORS
-    // Creación del arreglo de semáforos
-    semarr=createsemarray((key_t) 0x1234,3);
-	
-
-    initsem(semarr,E_MAX,TAMBUFFER);
-    initsem(semarr,N_BLOK,0);
-    initsem(semarr,S_EXMUT,1);
-
-    printf("Semáforos creados\n");
-	//*/
-
-	// Crear la memoria compartida
-	//shmid=shmget((key_t) 0x1235,sizeof(struct STRBUFF),0666|IPC_CREAT);
-	//bf=shmat(shmid,NULL,0);
 	
     /* Aquí se crean los procesos */
 	for(int i=0;i<PRODUCTORES;i++)
@@ -106,20 +71,9 @@ int main(int argc, char *argv[])
 
 
   
-    for(int n=0;n<4;n++) wait(NULL);
+    for(int n=0;n<PRODUCTORES;n++) wait(&status);
 
-	/* ESTO ES PARTE DE LOS SEMAFORS
-    // Borrar los semáforos
-    erasesem(semarr,E_MAX);
-	erasesem(semarr,N_BLOK);
-	erasesem(semarr,S_EXMUT);
-	
-	
-	shmdt(bf);	// Desconectar la memoria compartida al terminar
-	shmctl(shmid,IPC_RMID,NULL);	// Pedir al SO que elimine la memoria compartida
-	//*/
-	msgctl(queue, IPC_RMID, NULL);
-
+	msgctl(queue, IPC_RMID, NULL); /* Eliminmos el buzon */
     exit(EXIT_SUCCESS);
 }
 
@@ -137,45 +91,26 @@ void productor(int nprod)
     {
 		if(isprime(n) && n<HASTA)
 		{
-			/* ESTO ES PARTE DE LOS SEMAFORS
-			semwait(semarr,E_MAX);	// Si se llena el buffer se bloquea
-        	semwait(semarr,S_EXMUT);	// Asegurar el buffer como sección crítica
-			//*/
+			
 			if(n<limite)
 			{
-        		//bf->buffer[bf->ent]=n;
 				// Construye un mensaje
-				mensaje.mtype=1;	// Prioridad o tipo del mensaje
+				mensaje.mtype = 1; // Prioridad o tipo del mensaje
 				mensaje.num = n;
 				msgsnd(queue,&mensaje,sizeof(struct msgbuf),IPC_NOWAIT);	// No espera a que sea recibido
-				printf("Productor %d produce %d\n",nprod,n);
+				//printf("\tProductor %d produce %d\n",nprod,mensaje.num);
 			}
 			else
 			{
-				mensaje.mtype=1;	// Prioridad o tipo del mensaje
+				//mensaje.mtype=1;	// Prioridad o tipo del mensaje
 				mensaje.num = FIN; // -1
-				msgsnd(queue,&mensaje,sizeof(struct msgbuf),IPC_NOWAIT);	// No espera a que sea recibido
-				//bf->buffer[bf->ent]=FIN;
-				// printf("\t\t\tHASTA ENCONTRADO\n");
+				msgsnd(queue, &mensaje, sizeof(struct msgbuf), IPC_NOWAIT);	// No espera a que sea recibido
 			}
-				
-			/*
-			bf->ent++;
-			if(bf->ent==TAMBUFFER)	// Si TAMBUFFER es 10, 0 1 2 3 4 5 6 7 8 9
-				bf->ent=0;		// 0 = Terminador
-			//*/
- 
+			sleep(1);
         	usleep(rand()%VELPROD);
-
-			/* ESTO ES PARTE DE LOS SEMAFORS
-        	semsignal(semarr,S_EXMUT);	// Libera la sección crítica del buffer
-        	semsignal(semarr,N_BLOK);	// Si el consumidor está bloqueado porque el buffer está vacío, lo desbloqueas
-			
-
-        	usleep(rand()%VELPROD);
-			//*/
 		}
     }
+	msgctl(queue, IPC_RMID, NULL);
     exit(0);
 }
 
@@ -193,14 +128,6 @@ void consumidor()
     
 	while(productores)
     {
-		
-		/* ESTO ES PARTE DE LOS SEMAFORS
-        semwait(semarr,N_BLOK);	// Si el buffer está vacío, se bloquea
-        semwait(semarr,S_EXMUT);	// Asegura el buffer como sección crítica 
-		//*/
-
-
-		//dato=bf->buffer[bf->sal];
 		msgrcv(queue,&mensaje,sizeof(struct msgbuf),1,0);
 		dato = mensaje.num;
 
@@ -221,19 +148,8 @@ void consumidor()
 			printf("\t\t\tFINAL ENCONTRADO\n");
 		}
 
-		/*
-		bf->sal++;
-		if(bf->sal==TAMBUFFER)
-			bf->sal=0;
-		//*/
         usleep(rand()%VELCONS);
 
-		/* ESTO ES PARTE DE LOS SEMAFORS
-        semsignal(semarr,S_EXMUT);	// Libera la SC el buffer
-        semsignal(semarr,E_MAX);	// Si el productor está bloqueado porque el buffer estaba lleno, lo desbloquea
-		
-        usleep(rand()%VELCONS);
-		//*/
 		
     }
 	
@@ -287,7 +203,7 @@ void tree_inorder(struct TREE *root)
 {
 	if(root->left!=NULL)
 		tree_inorder(root->left);
-	printf("%d\n",root->dato);
+	printf("Numeros ordenados: %d\n",root->dato);
 	if(root->right!=NULL)
 		tree_inorder(root->right);
 	

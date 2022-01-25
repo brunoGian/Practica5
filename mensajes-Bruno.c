@@ -102,12 +102,12 @@ void productor(int nprod)
 			}
 			else
 			{
-				//mensaje.mtype=1;	// Prioridad o tipo del mensaje
+				mensaje.mtype=1;	// Prioridad o tipo del mensaje
 				mensaje.num = FIN; // -1
 				msgsnd(queue, &mensaje, sizeof(struct msgbuf), IPC_NOWAIT);	// No espera a que sea recibido
 			}
 			sleep(1);
-        	usleep(rand()%VELPROD);
+        	//usleep(rand()%VELPROD);
 		}
     }
 	msgctl(queue, IPC_RMID, NULL);
